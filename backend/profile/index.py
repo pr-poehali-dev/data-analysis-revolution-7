@@ -162,23 +162,42 @@ def handler(event: dict, context) -> dict:
 
     if action == "friends_search" and method == "GET":
         q = (qs.get("q") or "").strip()
-        if len(q) < 2:
-            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Минимум 2 символа"})}
+        if len(q) < 1:
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Введите запрос"})}
         conn = get_db()
         cur = conn.cursor()
-        cur.execute(
-            """SELECT u.user_id, u.username, u.avatar_url, u.is_verified,
-                      f.status,
-                      CASE WHEN f.requester_id = %s THEN 'sent' WHEN f.addressee_id = %s THEN 'received' ELSE NULL END as direction
-               FROM users u
-               LEFT JOIN friendships f ON (
-                 (f.requester_id = %s AND f.addressee_id = u.user_id) OR
-                 (f.addressee_id = %s AND f.requester_id = u.user_id)
-               )
-               WHERE LOWER(u.username) LIKE LOWER(%s) AND u.user_id != %s AND u.is_blocked = FALSE
-               LIMIT 20""",
-            (uid, uid, uid, uid, f"%{q}%", uid)
-        )
+        # Если запрос — число, ищем по user_id, иначе по username
+        if q.isdigit():
+            cur.execute(
+                """SELECT u.user_id, u.username, u.avatar_url, u.is_verified,
+                          f.status,
+                          CASE WHEN f.requester_id = %s THEN 'sent' WHEN f.addressee_id = %s THEN 'received' ELSE NULL END as direction
+                   FROM users u
+                   LEFT JOIN friendships f ON (
+                     (f.requester_id = %s AND f.addressee_id = u.user_id) OR
+                     (f.addressee_id = %s AND f.requester_id = u.user_id)
+                   )
+                   WHERE (u.user_id = %s OR LOWER(u.username) LIKE LOWER(%s)) AND u.user_id != %s AND u.is_blocked = FALSE
+                   LIMIT 20""",
+                (uid, uid, uid, uid, int(q), f"%{q}%", uid)
+            )
+        else:
+            if len(q) < 2:
+                conn.close()
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Минимум 2 символа"})}
+            cur.execute(
+                """SELECT u.user_id, u.username, u.avatar_url, u.is_verified,
+                          f.status,
+                          CASE WHEN f.requester_id = %s THEN 'sent' WHEN f.addressee_id = %s THEN 'received' ELSE NULL END as direction
+                   FROM users u
+                   LEFT JOIN friendships f ON (
+                     (f.requester_id = %s AND f.addressee_id = u.user_id) OR
+                     (f.addressee_id = %s AND f.requester_id = u.user_id)
+                   )
+                   WHERE LOWER(u.username) LIKE LOWER(%s) AND u.user_id != %s AND u.is_blocked = FALSE
+                   LIMIT 20""",
+                (uid, uid, uid, uid, f"%{q}%", uid)
+            )
         rows = cur.fetchall()
         conn.close()
         return {

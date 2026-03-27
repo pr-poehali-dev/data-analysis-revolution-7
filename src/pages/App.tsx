@@ -5,6 +5,7 @@ import ProfileModal from "@/components/ProfileModal";
 import FriendsPanel from "@/components/FriendsPanel";
 import MembersSidebar from "@/components/MembersSidebar";
 import GroupSettingsModal from "@/components/GroupSettingsModal";
+import CallScreen from "@/components/CallScreen";
 import GroupsSidebar from "@/app/GroupsSidebar";
 import ChatArea from "@/app/ChatArea";
 import CreateGroupModal from "@/app/CreateGroupModal";
@@ -44,6 +45,9 @@ const AppPage = () => {
 
   // Настройки группы
   const [showGroupSettings, setShowGroupSettings] = useState(false);
+
+  // Звонок
+  const [inCall, setInCall] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -157,11 +161,21 @@ const AppPage = () => {
       onToggleMembers={() => setShowMembers(v => !v)}
       onInputChange={setInputText}
       onSendMessage={sendMessage}
+      onStartCall={() => setInCall(true)}
     />
   );
 
   return (
     <div className="h-screen bg-[#36393f] text-white flex flex-col overflow-hidden">
+
+      {/* Экран звонка */}
+      {inCall && activeGroup && (
+        <CallScreen
+          roomName={`# ${activeGroup.name}`}
+          currentUser={user}
+          onLeave={() => setInCall(false)}
+        />
+      )}
 
       {/* Модал профиля */}
       {profileUserId !== null && (

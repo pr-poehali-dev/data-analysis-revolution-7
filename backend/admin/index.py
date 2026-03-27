@@ -1,5 +1,5 @@
 """
-Админ-панель: пользователи, блокировки, верификация, жалобы, управление группами.
+Админ панель: пользователи, блокировки, верификация, жалобы, управление группами.
 action: users|block|unblock|set-admin|verify-user|verify-group|set-official|reports|review-report
 """
 import json

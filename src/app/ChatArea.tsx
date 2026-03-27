@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   Hash, Users, Settings, Plus, Send,
-  MessageCircle, Crown, ArrowLeft, CheckCircle,
+  MessageCircle, Crown, ArrowLeft, CheckCircle, Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserData, Group, Message, avatarColor, formatTime } from "./types";
@@ -22,6 +22,7 @@ interface Props {
   onToggleMembers: () => void;
   onInputChange: (value: string) => void;
   onSendMessage: (e: React.FormEvent) => void;
+  onStartCall: () => void;
 }
 
 const ChatArea = ({
@@ -40,6 +41,7 @@ const ChatArea = ({
   onToggleMembers,
   onInputChange,
   onSendMessage,
+  onStartCall,
 }: Props) => {
   const navigate = useNavigate();
 
@@ -89,6 +91,13 @@ const ChatArea = ({
           </>
         )}
         <div className="ml-auto flex items-center gap-1 text-[#b9bbbe] flex-shrink-0">
+          <button
+            onClick={onStartCall}
+            className="p-1.5 rounded hover:bg-[#40444b] hover:text-[#3ba55c] transition-colors"
+            title="Голосовой звонок"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
           {canEditGroup && (
             <button
               onClick={onOpenGroupSettings}
