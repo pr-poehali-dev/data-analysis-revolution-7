@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import AppPage from "./pages/App";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -76,7 +77,7 @@ const App = () => {
               path="/app"
               element={
                 user ? (
-                  <Index />
+                  <AppPage />
                 ) : (
                   <Navigate to="/auth" replace />
                 )

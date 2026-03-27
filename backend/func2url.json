@@ -1,4 +1,6 @@
 {
+  "groups": "https://functions.poehali.dev/f9fe9f2f-cd58-4ee5-a9cf-743ec0f8be1a",
+  "messages": "https://functions.poehali.dev/59fd8fe5-79e8-4a3c-ac15-8175bb9361b6",
   "auth": "https://functions.poehali.dev/bfc34a2a-55ad-47da-9491-8c9819f08c94",
   "admin": "https://functions.poehali.dev/5e924c5d-9979-4aeb-9506-07ddfb6b63cb"
 }

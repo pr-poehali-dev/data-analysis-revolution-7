@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "name": "List messages without auth",
+      "method": "GET",
+      "path": "/?action=list&group_id=1",
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
