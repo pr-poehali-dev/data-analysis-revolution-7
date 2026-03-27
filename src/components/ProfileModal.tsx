@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Shield, CheckCircle, Flag, Pencil, Save, Calendar } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Shield, CheckCircle, Flag, Pencil, Save, Calendar, Camera, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import func2url from "../../backend/func2url.json";
 
@@ -22,6 +22,15 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 interface ProfileData {
   user_id: number;
   username: string;
@@ -30,6 +39,8 @@ interface ProfileData {
   is_verified: boolean;
   is_blocked: boolean;
   created_at: string;
+  avatar_url: string | null;
+  banner_url: string | null;
 }
 
 interface Props {
@@ -43,16 +54,20 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
   const [loading, setLoading] = useState(true);
   const isOwn = userId === currentUser.user_id;
 
-  // Редактирование
   const [editing, setEditing] = useState(false);
   const [bioInput, setBioInput] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Жалоба
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reporting, setReporting] = useState(false);
   const [reportSent, setReportSent] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const headers = { "Content-Type": "application/json", "X-Session-Token": currentUser.token };
 
@@ -74,6 +89,40 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
     setSaving(false);
   };
 
+  const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    const b64 = await fileToBase64(file);
+    const res = await fetch(`${PROFILE_URL}?action=upload_avatar`, {
+      method: "POST", headers,
+      body: JSON.stringify({ file: b64, content_type: file.type }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setProfile(prev => prev ? { ...prev, avatar_url: d.url } : prev);
+    }
+    setUploadingAvatar(false);
+    e.target.value = "";
+  };
+
+  const uploadBanner = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingBanner(true);
+    const b64 = await fileToBase64(file);
+    const res = await fetch(`${PROFILE_URL}?action=upload_banner`, {
+      method: "POST", headers,
+      body: JSON.stringify({ file: b64, content_type: file.type }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setProfile(prev => prev ? { ...prev, banner_url: d.url } : prev);
+    }
+    setUploadingBanner(false);
+    e.target.value = "";
+  };
+
   const sendReport = async () => {
     if (!reportReason.trim()) return;
     setReporting(true);
@@ -91,17 +140,60 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
         className="bg-[#36393f] rounded-lg w-full max-w-sm shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
+        {/* Скрытые input для файлов */}
+        {isOwn && (
+          <>
+            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={uploadAvatar} />
+            <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={uploadBanner} />
+          </>
+        )}
+
         {/* Баннер */}
-        <div className={`h-20 bg-gradient-to-r ${profile ? avatarColor(profile.username) : "from-[#5865f2] to-[#7c3aed]"} relative`}>
-          <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white bg-black/20 rounded-full p-1">
+        <div className="relative h-24 group">
+          {profile?.banner_url ? (
+            <img src={profile.banner_url} alt="Баннер" className="w-full h-full object-cover" />
+          ) : (
+            <div className={`w-full h-full bg-gradient-to-r ${profile ? avatarColor(profile.username) : "from-[#5865f2] to-[#7c3aed]"}`} />
+          )}
+          <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white bg-black/20 rounded-full p-1 z-10">
             <X className="w-4 h-4" />
           </button>
-          {/* Аватар */}
-          <div className="absolute -bottom-8 left-4">
-            <div className={`w-16 h-16 rounded-full border-4 border-[#36393f] bg-gradient-to-br ${profile ? avatarColor(profile.username) : "from-[#5865f2] to-[#7c3aed]"} flex items-center justify-center`}>
-              <span className="text-white text-xl font-bold">
-                {profile?.username?.[0]?.toUpperCase() || "?"}
-              </span>
+          {isOwn && (
+            <button
+              onClick={() => bannerInputRef.current?.click()}
+              disabled={uploadingBanner}
+              className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-white text-sm font-medium">
+                <ImagePlus className="w-5 h-5" />
+                {uploadingBanner ? "Загрузка..." : "Изменить фон"}
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* Аватар */}
+        <div className="relative px-4 pb-0">
+          <div className="absolute -top-8 left-4 group/avatar">
+            <div className="relative">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt={profile.username} className="w-16 h-16 rounded-full border-4 border-[#36393f] object-cover" />
+              ) : (
+                <div className={`w-16 h-16 rounded-full border-4 border-[#36393f] bg-gradient-to-br ${profile ? avatarColor(profile.username) : "from-[#5865f2] to-[#7c3aed]"} flex items-center justify-center`}>
+                  <span className="text-white text-xl font-bold">
+                    {profile?.username?.[0]?.toUpperCase() || "?"}
+                  </span>
+                </div>
+              )}
+              {isOwn && (
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
+                >
+                  <Camera className="w-5 h-5 text-white" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -111,35 +203,27 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
             <div className="text-[#b9bbbe] text-sm py-4 text-center">Загрузка...</div>
           ) : profile ? (
             <>
-              {/* Имя и значки */}
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="text-white font-bold text-lg">{profile.username}</span>
                 {profile.is_admin && (
-                  <span title="Администратор">
-                    <Shield className="w-4 h-4 text-[#ed4245]" />
-                  </span>
+                  <span title="Администратор"><Shield className="w-4 h-4 text-[#ed4245]" /></span>
                 )}
                 {profile.is_verified && (
-                  <span title="Верифицирован">
-                    <CheckCircle className="w-4 h-4 text-[#3ba55c]" />
-                  </span>
+                  <span title="Верифицирован"><CheckCircle className="w-4 h-4 text-[#3ba55c]" /></span>
                 )}
                 {profile.is_blocked && (
                   <span className="text-xs bg-[#ed4245]/20 text-[#ed4245] px-1.5 py-0.5 rounded">заблокирован</span>
                 )}
               </div>
 
-              {/* Цифровой ID */}
               <div className="text-[#b9bbbe] text-xs mb-3">ID: {profile.user_id}</div>
 
               <div className="bg-[#2f3136] rounded-lg p-3 space-y-3">
-                {/* Дата регистрации */}
                 <div className="flex items-center gap-2 text-[#b9bbbe] text-xs">
                   <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
                   <span>Участник с {formatDate(profile.created_at)}</span>
                 </div>
 
-                {/* Bio */}
                 <div>
                   <div className="text-[#8e9297] text-xs font-semibold uppercase tracking-wide mb-1.5">О себе</div>
                   {isOwn && editing ? (
@@ -198,7 +282,7 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
                       <div className="flex gap-2">
                         <Button size="sm" onClick={sendReport} disabled={reporting || !reportReason.trim()}
                           className="bg-[#ed4245] hover:bg-[#c03537] text-white h-7 text-xs px-3">
-                          {reporting ? "Отправка..." : "Отправить жалобу"}
+                          {reporting ? "Отправка..." : "Отправить"}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setShowReport(false)}
                           className="text-[#b9bbbe] hover:bg-[#40444b] h-7 text-xs px-3">
@@ -208,7 +292,7 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
                     </div>
                   ) : (
                     <button onClick={() => setShowReport(true)}
-                      className="flex items-center gap-1.5 text-[#72767d] hover:text-[#ed4245] text-xs transition-colors">
+                      className="flex items-center gap-1.5 text-[#72767d] hover:text-[#b9bbbe] text-xs transition-colors">
                       <Flag className="w-3.5 h-3.5" />
                       Пожаловаться
                     </button>
@@ -217,7 +301,7 @@ const ProfileModal = ({ userId, currentUser, onClose }: Props) => {
               )}
             </>
           ) : (
-            <div className="text-[#b9bbbe] text-sm py-4 text-center">Пользователь не найден</div>
+            <div className="text-[#ed4245] text-sm py-4 text-center">Пользователь не найден</div>
           )}
         </div>
       </div>
