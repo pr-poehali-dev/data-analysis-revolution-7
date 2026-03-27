@@ -1,6 +1,6 @@
 """
-Управление группами: создание, список, вступление, участники.
-action: list | create | join | leave | members
+Управление группами: создание, список, вступление, участники, редактирование.
+action: list | all | create | join | leave | members | update | delete
 """
 import json
 import os
@@ -140,15 +140,47 @@ def handler(event: dict, context) -> dict:
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
-            """SELECT u.user_id, u.username, gm.joined_at
+            """SELECT u.user_id, u.username, gm.joined_at, u.avatar_url, u.is_verified
                FROM group_members gm JOIN users u ON gm.user_id = u.user_id
                WHERE gm.group_id = %s ORDER BY gm.joined_at""",
             (group_id,)
         )
         rows = cur.fetchall()
         conn.close()
-        members = [{"user_id": r[0], "username": r[1], "joined_at": str(r[2])} for r in rows]
+        members = [{"user_id": r[0], "username": r[1], "joined_at": str(r[2]), "avatar_url": r[3], "is_verified": r[4]} for r in rows]
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"members": members})}
+
+    # Редактирование группы (только владелец или админ)
+    if action == "update" and method == "POST":
+        group_id = body.get("group_id")
+        name = (body.get("name") or "").strip()
+        description = (body.get("description") or "").strip()
+        if not group_id:
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "group_id обязателен"})}
+        if name and len(name) < 2:
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Название минимум 2 символа"})}
+        if len(name) > 64:
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Название максимум 64 символа"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT owner_id FROM groups WHERE id = %s", (group_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Группа не найдена"})}
+        cur.execute("SELECT is_admin FROM users WHERE user_id = %s", (user["user_id"],))
+        u = cur.fetchone()
+        is_admin = u and u[0]
+        if row[0] != user["user_id"] and not is_admin:
+            conn.close()
+            return {"statusCode": 403, "headers": CORS, "body": json.dumps({"error": "Нет прав"})}
+        if name:
+            cur.execute("UPDATE groups SET name = %s, description = %s WHERE id = %s", (name, description, group_id))
+        else:
+            cur.execute("UPDATE groups SET description = %s WHERE id = %s", (description, group_id))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
 
     # Удаление группы (только владелец или админ)
     if action == "delete" and method == "POST":

@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Hash, Users, Settings, LogOut, Plus, Send, Menu,
-  MessageCircle, Crown, ChevronDown, ArrowLeft, Trash2,
+  Hash, Users, Settings, LogOut, Plus, Send,
+  MessageCircle, Crown, ChevronDown, ArrowLeft,
   CheckCircle, Shield, UserPlus, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ProfileModal from "@/components/ProfileModal";
 import FriendsPanel from "@/components/FriendsPanel";
+import MembersSidebar from "@/components/MembersSidebar";
+import GroupSettingsModal from "@/components/GroupSettingsModal";
 import func2url from "../../backend/func2url.json";
 
 const GROUPS_URL = func2url.groups;
@@ -82,12 +84,14 @@ const AppPage = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  // Удаление группы
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
   // Профиль
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
+
+  // Правая панель участников
+  const [showMembers, setShowMembers] = useState(false);
+
+  // Настройки группы
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -128,7 +132,7 @@ const AppPage = () => {
 
   const selectGroup = (group: Group) => {
     setActiveGroup(group);
-    setConfirmDelete(false);
+    setShowGroupSettings(false);
     setView("chat");
   };
 
@@ -167,26 +171,9 @@ const AppPage = () => {
     selectGroup(newGroup);
   };
 
-  const deleteGroup = async () => {
-    if (!activeGroup) return;
-    setDeleting(true);
-    const res = await fetch(`${GROUPS_URL}?action=delete`, {
-      method: "POST", headers,
-      body: JSON.stringify({ group_id: activeGroup.id }),
-    });
-    if (res.ok) {
-      setActiveGroup(null);
-      setMessages([]);
-      setConfirmDelete(false);
-      setView("sidebar");
-      await loadGroups();
-    }
-    setDeleting(false);
-  };
-
   if (!user) return null;
 
-  const canDeleteGroup = activeGroup && (activeGroup.owner_id === user.user_id || user.is_admin);
+  const canEditGroup = activeGroup && (activeGroup.owner_id === user.user_id || user.is_admin);
 
   // Sidebar JSX
   const SidebarContent = (
@@ -301,28 +288,23 @@ const AppPage = () => {
                 <span className="text-[#8e9297] text-sm hidden sm:block truncate">{activeGroup.description}</span>
               </>
             )}
-            <div className="ml-auto flex items-center gap-2 text-[#b9bbbe] flex-shrink-0">
-              <Users className="w-5 h-5 cursor-pointer hover:text-[#dcddde]" />
-              {canDeleteGroup && (
-                confirmDelete ? (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[#ed4245] text-xs hidden sm:block">Удалить?</span>
-                    <button onClick={deleteGroup} disabled={deleting}
-                      className="text-xs bg-[#ed4245] hover:bg-[#c03537] text-white px-2 py-0.5 rounded">
-                      {deleting ? "..." : "Да"}
-                    </button>
-                    <button onClick={() => setConfirmDelete(false)}
-                      className="text-xs bg-[#4f545c] hover:bg-[#5d6269] text-white px-2 py-0.5 rounded">
-                      Нет
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmDelete(true)}
-                    className="hover:text-[#ed4245] transition-colors" title="Удалить группу">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )
+            <div className="ml-auto flex items-center gap-1 text-[#b9bbbe] flex-shrink-0">
+              {canEditGroup && (
+                <button
+                  onClick={() => setShowGroupSettings(true)}
+                  className="p-1.5 rounded hover:bg-[#40444b] hover:text-[#dcddde] transition-colors"
+                  title="Настройки группы"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
               )}
+              <button
+                onClick={() => setShowMembers(v => !v)}
+                className={`p-1.5 rounded hover:bg-[#40444b] transition-colors ${showMembers ? "text-white bg-[#40444b]" : "hover:text-[#dcddde]"}`}
+                title="Участники"
+              >
+                <Users className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -431,6 +413,28 @@ const AppPage = () => {
         />
       )}
 
+      {/* Настройки группы */}
+      {showGroupSettings && activeGroup && (
+        <GroupSettingsModal
+          group={activeGroup}
+          token={user.token}
+          isAdmin={user.is_admin}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdated={(name, description) => {
+            setActiveGroup(prev => prev ? { ...prev, name, description } : prev);
+            loadGroups();
+          }}
+          onDeleted={() => {
+            setActiveGroup(null);
+            setMessages([]);
+            setShowGroupSettings(false);
+            setShowMembers(false);
+            setView("sidebar");
+            loadGroups();
+          }}
+        />
+      )}
+
       {/* Модал создания группы */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -489,7 +493,7 @@ const AppPage = () => {
           </button>
         </div>
 
-        {/* Desktop: sidebar + chat рядом */}
+        {/* Desktop: sidebar + chat + members рядом */}
         <div className="hidden lg:flex flex-1 overflow-hidden">
           {/* Sidebar */}
           <div className="w-60 flex-shrink-0 overflow-hidden">
@@ -503,6 +507,15 @@ const AppPage = () => {
           <div className="flex-1 overflow-hidden">
             {ChatContent}
           </div>
+          {/* Members — правая панель */}
+          {showMembers && activeGroup && (
+            <MembersSidebar
+              groupId={activeGroup.id}
+              ownerId={activeGroup.owner_id}
+              token={user.token}
+              onOpenProfile={setProfileUserId}
+            />
+          )}
         </div>
 
         {/* Mobile: один экран за раз */}
