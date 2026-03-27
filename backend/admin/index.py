@@ -1,6 +1,6 @@
 """
-Админ-панель: просмотр пользователей, блокировка/разблокировка по ID.
-Параметр action передаётся в query string: ?action=users|block|unblock|set-admin
+Админ-панель: пользователи, блокировки, верификация, жалобы, управление группами.
+action: users|block|unblock|set-admin|verify-user|verify-group|set-official|reports|review-report
 """
 import json
 import os
@@ -109,6 +109,79 @@ def handler(event: dict, context) -> dict:
         conn = get_db()
         cur = conn.cursor()
         cur.execute("UPDATE users SET is_admin = %s WHERE user_id = %s", (value, target_id))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"ok": True})}
+
+    # Верификация пользователя (галочка)
+    if action == "verify-user" and method == "POST":
+        target_id = body.get("user_id")
+        value = body.get("value", True)
+        if not target_id:
+            return {"statusCode": 400, "headers": CORS_HEADERS, "body": json.dumps({"error": "user_id обязателен"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET is_verified = %s WHERE user_id = %s", (value, target_id))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"ok": True})}
+
+    # Верификация группы (зелёная галочка)
+    if action == "verify-group" and method == "POST":
+        group_id = body.get("group_id")
+        value = body.get("value", True)
+        if not group_id:
+            return {"statusCode": 400, "headers": CORS_HEADERS, "body": json.dumps({"error": "group_id обязателен"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE groups SET is_verified = %s WHERE id = %s", (value, group_id))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"ok": True})}
+
+    # Официальная группа (корона)
+    if action == "set-official" and method == "POST":
+        group_id = body.get("group_id")
+        value = body.get("value", True)
+        if not group_id:
+            return {"statusCode": 400, "headers": CORS_HEADERS, "body": json.dumps({"error": "group_id обязателен"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE groups SET is_official = %s WHERE id = %s", (value, group_id))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"ok": True})}
+
+    # Список жалоб
+    if action == "reports" and method == "GET":
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT r.id, r.reporter_id, ur.username as reporter_name,
+                      r.target_user_id, ut.username as target_name,
+                      r.reason, r.created_at, r.is_reviewed
+               FROM reports r
+               JOIN users ur ON r.reporter_id = ur.user_id
+               LEFT JOIN users ut ON r.target_user_id = ut.user_id
+               ORDER BY r.is_reviewed ASC, r.created_at DESC"""
+        )
+        rows = cur.fetchall()
+        conn.close()
+        reports = [{
+            "id": r[0], "reporter_id": r[1], "reporter_name": r[2],
+            "target_user_id": r[3], "target_name": r[4],
+            "reason": r[5], "created_at": str(r[6]), "is_reviewed": r[7]
+        } for r in rows]
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"reports": reports})}
+
+    # Отметить жалобу как рассмотренную
+    if action == "review-report" and method == "POST":
+        report_id = body.get("report_id")
+        if not report_id:
+            return {"statusCode": 400, "headers": CORS_HEADERS, "body": json.dumps({"error": "report_id обязателен"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE reports SET is_reviewed = TRUE WHERE id = %s", (report_id,))
         conn.commit()
         conn.close()
         return {"statusCode": 200, "headers": CORS_HEADERS, "body": json.dumps({"ok": True})}

@@ -53,7 +53,8 @@ def handler(event: dict, context) -> dict:
         cur.execute(
             """SELECT g.id, g.name, g.description, g.owner_id, g.created_at,
                       (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) as member_count,
-                      (SELECT COUNT(*) FROM messages m WHERE m.group_id = g.id) as message_count
+                      (SELECT COUNT(*) FROM messages m WHERE m.group_id = g.id) as message_count,
+                      g.is_official, g.is_verified
                FROM groups g
                JOIN group_members gm ON g.id = gm.group_id
                WHERE gm.user_id = %s
@@ -64,7 +65,8 @@ def handler(event: dict, context) -> dict:
         conn.close()
         groups = [
             {"id": r[0], "name": r[1], "description": r[2], "owner_id": r[3],
-             "created_at": str(r[4]), "member_count": r[5], "message_count": r[6]}
+             "created_at": str(r[4]), "member_count": r[5], "message_count": r[6],
+             "is_official": r[7], "is_verified": r[8]}
             for r in rows
         ]
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"groups": groups})}
@@ -147,5 +149,31 @@ def handler(event: dict, context) -> dict:
         conn.close()
         members = [{"user_id": r[0], "username": r[1], "joined_at": str(r[2])} for r in rows]
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"members": members})}
+
+    # Удаление группы (только владелец или админ)
+    if action == "delete" and method == "POST":
+        group_id = body.get("group_id")
+        if not group_id:
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "group_id обязателен"})}
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT owner_id FROM groups WHERE id = %s", (group_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Группа не найдена"})}
+        # Проверяем: владелец или администратор
+        cur.execute("SELECT is_admin FROM users WHERE user_id = %s", (user["user_id"],))
+        u = cur.fetchone()
+        is_admin = u and u[0]
+        if row[0] != user["user_id"] and not is_admin:
+            conn.close()
+            return {"statusCode": 403, "headers": CORS, "body": json.dumps({"error": "Нет прав на удаление"})}
+        cur.execute("DELETE FROM messages WHERE group_id = %s", (group_id,))
+        cur.execute("DELETE FROM group_members WHERE group_id = %s", (group_id,))
+        cur.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
 
     return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Not found"})}

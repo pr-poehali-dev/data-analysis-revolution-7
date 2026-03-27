@@ -1,0 +1,17 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_official BOOLEAN DEFAULT FALSE;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS reports (
+  id SERIAL PRIMARY KEY,
+  reporter_id BIGINT NOT NULL REFERENCES users(user_id),
+  target_user_id BIGINT REFERENCES users(user_id),
+  target_group_id INTEGER REFERENCES groups(id),
+  reason TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  is_reviewed BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_reviewed ON reports(is_reviewed);
